@@ -1,0 +1,32 @@
+/*
+See LICENSE folder for this sample’s licensing information.
+
+Abstract:
+The view that shows a single text message with styling.
+*/
+
+import SwiftUI
+
+struct MessageView: View {
+    var message: Message
+    
+    var body: some View {
+        Text(message.content)
+            .padding(10)
+            .foregroundColor(message.isLocalPlayer ? .white : .black)
+            .background(message.isLocalPlayer ? Color.blue : Color(white: 240 / 255.0))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .frame(maxWidth: .infinity, alignment: message.isLocalPlayer ? .bottomTrailing : .bottomLeading)
+    }
+}
+
+struct MessageViewPreviews: PreviewProvider {
+    static var previews: some View {
+        VStack {
+            MessageView(message: Message(content: "This is the local player.", playerName: "Ravi Patel",
+                                         isLocalPlayer: true))
+            MessageView(message: Message(content: "This is the remote player.", playerName: "Ravi Patel",
+                                         isLocalPlayer: false))
+        }
+    }
+}
