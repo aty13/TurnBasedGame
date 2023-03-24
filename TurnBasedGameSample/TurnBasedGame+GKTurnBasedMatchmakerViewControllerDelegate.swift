@@ -27,12 +27,5 @@ extension TurnBasedGame: GKTurnBasedMatchmakerViewControllerDelegate {
         // Remove the game view.
         resetGame()
     }
-    
-    /// Dismisses the view controller when the local player starts a match.
-    func turnBasedMatchmakerViewController(_ viewController: GKTurnBasedMatchmakerViewController,
-                                           didFind match: GKTurnBasedMatch) {
-        // Dismiss the view controller.
-        viewController.dismiss(animated: true)
-    }
 }
 

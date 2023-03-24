@@ -23,9 +23,9 @@ struct MessageView: View {
 struct MessageViewPreviews: PreviewProvider {
     static var previews: some View {
         VStack {
-            MessageView(message: Message(content: "This is the local player.", playerName: "Ravi Patel",
+            MessageView(message: Message(content: "This is the local player.", playerName: "Player 1",
                                          isLocalPlayer: true))
-            MessageView(message: Message(content: "This is the remote player.", playerName: "Ravi Patel",
+            MessageView(message: Message(content: "This is the remote player.", playerName: "Player 2",
                                          isLocalPlayer: false))
         }
     }

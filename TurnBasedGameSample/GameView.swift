@@ -8,7 +8,7 @@ The view that displays the game play interface.
 import SwiftUI
 
 struct GameView: View {
-    @Environment(\.dismiss) var dismiss
+    @Environment(\.presentationMode) var presentationMode
     @ObservedObject var game: TurnBasedGame
     @State private var showMessages: Bool = false
     
@@ -21,43 +21,39 @@ struct GameView: View {
             Form {
                 Section("Game Data") {
                     HStack {
-                        game.myAvatar
-                            .resizable()
-                            .frame(width: 35.0, height: 35.0)
-                            .clipShape(Circle())
-                        Spacer()
-                        
-                        Text(game.myName)
-                            .lineLimit(2)
+                        HStack {
+                            game.myAvatar
+                                .resizable()
+                                .frame(width: 35.0, height: 35.0)
+                                .clipShape(Circle())
+                            
+                            Text(game.myName + " (me)")
+                                .lineLimit(2)
+                        }
                         Spacer()
                         
                         Text("\(game.myItems)")
                             .lineLimit(2)
                     }
-                    .padding(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 10))
-                    .background(
-                        .blue.opacity(game.myTurn ? 0.25 : 0),
-                        in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    .listRowBackground(Rectangle().fill(game.myTurn ? .blue.opacity(0.25) : .white))
                     
                     HStack {
-                        game.opponentAvatar
-                            .resizable()
-                            .frame(width: 35.0, height: 35.0)
-                            .clipShape(Circle())
-                        Spacer()
-                        
-                        Text(game.opponentName)
-                            .lineLimit(2)
+                        HStack {
+                            game.opponentAvatar
+                                .resizable()
+                                .frame(width: 35.0, height: 35.0)
+                                .clipShape(Circle())
+                            
+                            Text(game.opponentName)
+                                .lineLimit(2)
+                        }
                         Spacer()
                         
                         Text("\(game.opponentItems)")
                             .lineLimit(2)
                     }
-                    .padding(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 10))
-                    .background(
-                        .blue.opacity(game.myTurn ? 0 : 0.25),
-                        in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-                    
+                    .listRowBackground(Rectangle().fill(game.myTurn ? .white : .blue.opacity(0.25)))
+                 
                     HStack {
                         Text("Count")
                             .lineLimit(2)
@@ -65,16 +61,28 @@ struct GameView: View {
                         
                         Text("\(game.count)")
                     }
-                    .padding(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 10))
                     
                     if let matchMessage = game.matchMessage {
                         HStack {
-                            Text("Match Message")
-                                .lineLimit(2)
-                            Spacer()
                             Text(matchMessage)
                         }
-                        .padding(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 10))
+                    }
+                }
+                Section("Game Controls") {
+                    Button("Take Turn") {
+                        Task {
+                            await game.takeTurn()
+                        }
+                    }
+                    .disabled(!game.myTurn)
+                    
+                    Button("Back") {
+                        game.quitGame()
+                    }
+                    Button("Forfeit") {
+                        Task {
+                            await game.forfeitMatch()
+                        }
                     }
                 }
                 Section("Exchanges") {
@@ -85,19 +93,20 @@ struct GameView: View {
                         }
                     }
                     .disabled(game.opponent == nil)
-                    
-                    // Send a text message that initiates an exchange of items.
-                    Button("Message") {
-                        withAnimation(.easeInOut(duration: 1)) {
-                            showMessages = true
-                        }
-                    }
-                    .buttonStyle(MessageButtonStyle())
-                    .onTapGesture {
-                        dismiss()
-                    }
                 }
                 Section("Communications") {
+                    HStack {
+                        // Send text messages as exchange items.
+                        Button("Message") {
+                            withAnimation(.easeInOut(duration: 1)) {
+                                showMessages = true
+                            }
+                        }
+                        .buttonStyle(MessageButtonStyle())
+                        .onTapGesture {
+                            presentationMode.wrappedValue.dismiss()
+                        }
+                    }
                     // Send a reminder to take their turn.
                     Button("Send Reminder") {
                         Task {
@@ -106,32 +115,26 @@ struct GameView: View {
                     }
                     .disabled(game.myTurn)
                 }
-                Section("Game Controls") {
-                    Button("Take Turn") {
-                        Task {
-                            await game.takeTurn()
-                        }
-                    }
-                    .disabled(!game.myTurn)
-                    
-                    Button("Forfeit") {
-                        dismiss()
-                        Task {
-                            await game.forfeitMatch()
-                        }
-                    }
-                    
-                    Button("Back") {
-                        game.quitGame()
-                        dismiss()
-                    }
-                }
             }
         }
         // Display the text message view if it's enabled.
         .sheet(isPresented: $showMessages) {
             ChatView(game: game)
         }
+        .alert("Game Over", isPresented: $game.youWon, actions: {
+            Button("OK", role: .cancel) {
+                game.resetGame()
+            }
+        }, message: {
+            Text("You win.")
+        })
+        .alert("Game Over", isPresented: $game.youLost, actions: {
+            Button("OK", role: .cancel) {
+                game.resetGame()
+            }
+        }, message: {
+            Text("You lose.")
+        })
     }
 }
 
@@ -146,6 +149,8 @@ struct MessageButtonStyle: ButtonStyle {
         HStack {
             Image(systemName: configuration.isPressed ? "bubble.left.fill" : "bubble.left")
                 .imageScale(.medium)
+            Text("Text Chat")
         }
+        .foregroundColor(Color.blue)
     }
 }

@@ -6,7 +6,7 @@ The main class that implements the logic for a simple turn-based game.
 */
 
 import Foundation
-import GameKit
+@preconcurrency import GameKit
 import SwiftUI
 
 /// - Tag:TurnBasedGame
@@ -16,6 +16,10 @@ class TurnBasedGame: NSObject, GKMatchDelegate, GKLocalPlayerListener, Observabl
     @Published var matchAvailable = false
     @Published var playingGame = false
     @Published var myTurn = false
+    
+    // Outcomes of the game for notifing players.
+    @Published var youWon = false
+    @Published var youLost = false
     
     // The match information.
     @Published var currentMatchID: String? = nil
@@ -69,12 +73,15 @@ class TurnBasedGame: NSObject, GKMatchDelegate, GKLocalPlayerListener, Observabl
     
     /// Resets the game interface to the content view.
     func resetGame() {
+        // Reset the game data.
         playingGame = false
         myTurn = false
         currentMatchID = nil
         localParticipant?.items = 50
         opponent = nil
         count = 0
+        youWon = false
+        youLost = false
     }
     
     /// Authenticates the local player and registers for turn-based events.
@@ -85,12 +92,12 @@ class TurnBasedGame: NSObject, GKMatchDelegate, GKLocalPlayerListener, Observabl
             if let viewController = viewController {
                 // If the view controller is non-nil, present it to the player so they can
                 // perform some necessary action to complete authentication.
-                self.rootViewController?.present(viewController, animated: true, completion: nil)
+                self.rootViewController?.present(viewController, animated: true) { }
                 return
             }
-            if error != nil {
+            if let error {
                 // If you can’t authenticate the player, disable Game Center features in your game.
-                print("Error: \(error!.localizedDescription).")
+                print("Error: \(error.localizedDescription).")
                 return
             }
             
@@ -99,21 +106,21 @@ class TurnBasedGame: NSObject, GKMatchDelegate, GKLocalPlayerListener, Observabl
             
             // Load the local player's avatar.
             GKLocalPlayer.local.loadPhoto(for: GKPlayer.PhotoSize.small) { image, error in
-                if let image = image {
+                if let image {
                     // Create a Participant object to store the local player data.
                     self.localParticipant = Participant(player: GKLocalPlayer.local,
                                                    avatar: Image(uiImage: image))
                 }
-                if error != nil {
+                if let error {
                     // Handle an error if it occurs.
-                    print("Error: \(error!.localizedDescription).")
+                    print("Error: \(error.localizedDescription).")
                 }
             }
             
             // Register for turn-based invitations and other events.
             GKLocalPlayer.local.register(self)
             
-            // Enable the start game button.
+            // Enable the Start Game button.
             self.matchAvailable = true
         }
     }
@@ -139,7 +146,7 @@ class TurnBasedGame: NSObject, GKMatchDelegate, GKLocalPlayerListener, Observabl
         // Present the interface where the player selects opponents and starts the game.
         let viewController = GKTurnBasedMatchmakerViewController(matchRequest: request)
         viewController.turnBasedMatchmakerDelegate = self
-        self.rootViewController?.present(viewController, animated: true, completion: nil)
+        rootViewController?.present(viewController, animated: true) { }
     }
     
     /// Removes all the matches from Game Center.
@@ -191,10 +198,7 @@ class TurnBasedGame: NSObject, GKMatchDelegate, GKLocalPlayerListener, Observabl
                 try await match.endMatchInTurn(withMatch: match.matchData!)
                 
                 // Notify the local player when the match ends.
-                await GKNotificationBanner.show(withTitle: "Match Ended Title",
-                                                message: "This is a GKNotificationBanner message.")
-                
-                resetGame()
+                youWon = true
             } else {
                 // Otherwise, take the turn and pass to the next participants.
                 
@@ -202,7 +206,7 @@ class TurnBasedGame: NSObject, GKMatchDelegate, GKLocalPlayerListener, Observabl
                 count += 1
                 
                 // Create the game data to store in Game Center.
-                let gameData = (archiveMatchData() ?? match.matchData)!
+                let gameData = (encodeGameData() ?? match.matchData)!
 
                 // Remove the current participant from the match participants.
                 let nextParticipants = activeParticipants.filter {
@@ -244,7 +248,7 @@ class TurnBasedGame: NSObject, GKMatchDelegate, GKLocalPlayerListener, Observabl
                 // have the current data.
                 
                 // Create the game data to store in Game Center.
-                let gameData = (archiveMatchData() ?? match.matchData)!
+                let gameData = (encodeGameData() ?? match.matchData)!
 
                 // Remove the participants who quit and the current participant.
                 let nextParticipants = match.participants.filter {
@@ -259,21 +263,13 @@ class TurnBasedGame: NSObject, GKMatchDelegate, GKLocalPlayerListener, Observabl
                     match: gameData)
                 
                 // Notify the local player that they forfeit the match.
-                await GKNotificationBanner.show(
-                    withTitle: "Forfeit Match Title",
-                    message: "This is a GKNotificationBanner message.")
-                
-                resetGame()
+                youLost = true
             } else {
                 // Forfeit the match while it's not the local player's turn.
                 try await match.participantQuitOutOfTurn(with: GKTurnBasedMatch.Outcome.quit)
                 
                 // Notify the local player that they forfeit the match.
-                await GKNotificationBanner.show(
-                    withTitle: "Forfeit Match Title",
-                    message: "This is a GKNotificationBanner message.")
-
-                resetGame()
+                youLost = true
             }
         } catch {
             print("Error: \(error.localizedDescription).")
@@ -315,31 +311,28 @@ class TurnBasedGame: NSObject, GKMatchDelegate, GKLocalPlayerListener, Observabl
         // Check whether there's an ongoing match.
         guard currentMatchID != nil else { return }
         
+        // Create a message instance to display in the message view.
+        let message = Message(content: content, playerName: GKLocalPlayer.local.displayName,
+                                       isLocalPlayer: true)
+        messages.append(message)
+        
         do {
-            // Create a message object to display in the message view.
-            let message: Message = Message(content: content, playerName: GKLocalPlayer.local.displayName,
-                                           isLocalPlayer: true)
-            messages.append(message)
-            
             // Create the exchange data.
-            let data: Data? = content.data(using: .utf8)
+            guard let data = content.data(using: .utf8) else { return }
 
-            if data != nil {
-                // Load the most recent match object from the match ID.
-                let match = try await GKTurnBasedMatch.load(withID: currentMatchID!)
+            // Load the most recent match object from the match ID.
+            let match = try await GKTurnBasedMatch.load(withID: currentMatchID!)
 
-                // Remove the local player (the sender) from the recipients; otherwise, GameKit doesn't send
-                // the exchange request.
-                let participants = match.participants.filter {
-                    localParticipant?.player.displayName != $0.player?.displayName
-                }
-
-                // Send the exchange request with the message.
-                try await match.sendExchange(to: participants, data: data!,
-                    localizableMessageKey: "This is my text message.",
-                    arguments: [], timeout: GKTurnTimeoutDefault)
+            // Remove the local player (the sender) from the recipients;
+            // otherwise, GameKit doesn't send the exchange request.
+            let participants = match.participants.filter {
+                localParticipant?.player.displayName != $0.player?.displayName
             }
-            
+
+            // Send the exchange request with the message.
+            try await match.sendExchange(to: participants, data: data,
+                                         localizableMessageKey: "This is my text message.",
+                                         arguments: [], timeout: GKTurnTimeoutDefault)
         } catch {
             print("Error: \(error.localizedDescription).")
             return

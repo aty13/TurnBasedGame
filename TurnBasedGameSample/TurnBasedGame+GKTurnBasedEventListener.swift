@@ -6,7 +6,7 @@ An extension for turn-based games that handles turn-based listener events.
 */
 
 import Foundation
-import GameKit
+@preconcurrency import GameKit
 import SwiftUI
 
 extension TurnBasedGame: GKTurnBasedEventListener {
@@ -46,9 +46,7 @@ extension TurnBasedGame: GKTurnBasedEventListener {
                         try await match.endMatchInTurn(withMatch: match.matchData!)
                         
                         // Notify the local player when the match ends.
-                        await GKNotificationBanner.show(withTitle: "Match Ended Title",
-                                                        message: "This is a GKNotificationBanner message.")
-                        resetGame()
+                        youWon = true
                     }
                     else if (currentMatchID == nil) || (currentMatchID == match.matchID) {
                         // If the local player isn't playing another match or is playing this match,
@@ -76,7 +74,7 @@ extension TurnBasedGame: GKTurnBasedEventListener {
                             }
                             
                             // Restore the current game data from the match object.
-                            unarchiveMatchData(matchData: match.matchData!)
+                            decodeGameData(matchData: match.matchData!)
                         }
                         
                         // Display the match message.
@@ -118,13 +116,14 @@ extension TurnBasedGame: GKTurnBasedEventListener {
     /// Handles when a participant ends the match using the view controller interface.
     func player(_ player: GKPlayer, matchEnded match: GKTurnBasedMatch) {
         // Notify the local participant when the match ends.
-        GKNotificationBanner.show(withTitle: "Match Ended Title",
-                                  message: "This is a GKNotificationBanner message.", completionHandler: nil)
-        
-        // Check whether the local player is playing the match that ends before returning to the content view.
-        if currentMatchID == match.matchID {
-            resetGame()
-        }
+        youLost = true
+//        GKNotificationBanner.show(withTitle: "Match Ended Title",
+//                                  message: "This is a GKNotificationBanner message.", completionHandler: nil)
+//
+//        // Check whether the local player is playing the match that ends before returning to the content view.
+//        if currentMatchID == match.matchID {
+//            resetGame()
+//        }
     }
     
     // MARK: GKTurnBasedEventListener Exchange Methods
@@ -136,7 +135,7 @@ extension TurnBasedGame: GKTurnBasedEventListener {
             if exchange.message != "This is my exchange item request." {
                 // Unpack the exchange data and display the message in the chat view.
                 let content = String(decoding: exchange.data!, as: UTF8.self)
-                let message: Message = Message(content: content, playerName: exchange.sender.player?.displayName ?? "unknown", isLocalPlayer: false)
+                let message = Message(content: content, playerName: exchange.sender.player?.displayName ?? "unknown", isLocalPlayer: false)
                 messages.append(message)
             }
             
@@ -199,7 +198,7 @@ extension TurnBasedGame: GKTurnBasedEventListener {
             }
  
             // Resolve the game data to pass to all participants.
-            let gameData = (archiveMatchData() ?? match.matchData)!
+            let gameData = (encodeGameData() ?? match.matchData)!
 
             // Save and forward the game data with the latest items.
             Task {

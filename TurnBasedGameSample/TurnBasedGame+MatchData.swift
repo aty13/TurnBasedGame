@@ -27,72 +27,95 @@ struct Participant: Identifiable {
     var items = 50
 }
 
+// Codable game data for sending to players.
+struct GameData: Codable {
+    var count: Int
+    var items: [String: Int]
+}
+
 extension TurnBasedGame {
     
-    // MARK: Archiving Game Data
+    // MARK: Codable Game Data
     
-    /// Returns a data representation of the game data that you pass between players.
+    /// Creates a data representation of the game count and items for each player.
     ///
-    /// - Returns: An archive of a property list with key-value pairs that represent the match state.
-    func archiveMatchData() -> Data? {
-        // The property list keys are [
-        //    "score": count,
-        //    [local player's identifier]: myItems,
-        //    [opponent's identifier]: opponentItems ]
-        var gamePropertyList: [String: Any] = [:]
+    /// - Returns: A representation of game data that contains only the game scores.
+    func encodeGameData() -> Data? {
+        // Create a dictionary of items for each player.
+        var items = [String: Int]()
         
-        // Add the score.
-        gamePropertyList["score"] = String(describing: count)
-        
-        // Include the local player's items.
-        if let localParticipant = self.localParticipant {
-            gamePropertyList[localParticipant.player.displayName] = String(describing: localParticipant.items)
+        // Add the local player's items.
+        if let localPlayerName = localParticipant?.player.displayName {
+            items[localPlayerName] = localParticipant?.items
         }
         
-        // Include the opponent items when an opponent joins the match.
-        if let opponent = self.opponent {
-            gamePropertyList[opponent.player.displayName] = String(describing: opponent.items)
+        // Add the opponent's items.
+        if let opponentPlayerName = opponent?.player.displayName {
+            items[opponentPlayerName] = opponent?.items
         }
-
-        // Archive the property list and return the Data object.
+        
+        let gameData = GameData(count: count, items: items)
+        return encode(gameData: gameData)
+    }
+    
+    /// Creates a data representation from the game data for sending to other players.
+    ///
+    /// - Returns: A representation of the game data.
+    func encode(gameData: GameData) -> Data? {
+        let encoder = PropertyListEncoder()
+        encoder.outputFormat = .xml
+        
         do {
-            let gameData = try PropertyListSerialization.data(fromPropertyList: gamePropertyList,
-                                                              format: PropertyListSerialization.PropertyListFormat.binary,
-                                                              options: 0)
-            return gameData
+            let data = try encoder.encode(gameData)
+            return data
         } catch {
             print("Error: \(error.localizedDescription).")
             return nil
         }
     }
     
-    /// Sets the match state to the provided game data.
+    /// Decodes a data representation of game data and updates the scores.
     ///
-    /// Unarchives a property list representation of the game data with key-value pairs that represent the match state.
-    /// - Parameter matchData: A data representation of the match state that another game instance creates using the `archiveMatchData()` method.
-    func unarchiveMatchData(matchData: Data) {
-        do {
-            // Convert the Data object to a property list.
-            if let gamePropertyList: [String: Any] =
-                try PropertyListSerialization.propertyList(from: matchData, format: nil) as? [String: Any] {
-                
-                // Restore the score from the property list.
-                if let countString: String = gamePropertyList["score"] as? String {
-                    count = Int(countString)!
-                }
+    /// - Parameter matchData: A data representation of the game data.
+    func decodeGameData(matchData: Data) {
+        let gameData = try? PropertyListDecoder().decode(GameData.self, from: matchData)
+        guard let gameData = gameData else { return }
 
-                // Restore the local player's items.
-                if let items: String = gamePropertyList[self.localParticipant!.player.displayName] as? String {
-                    self.localParticipant?.items = Int(items)!
-                }
+        // Set the match count.
+        count = gameData.count
 
-                // Restore the opponent's items.
-                if let opponentItems: String = gamePropertyList[self.opponent!.player.displayName] as? String {
-                    self.opponent?.items = Int(opponentItems)!
-                }
+        // Set the local player's items.
+        if let localPlayerName = localParticipant?.player.displayName {
+            if let items = gameData.items[localPlayerName] {
+                localParticipant?.items = items
             }
-        } catch {
-            print("Error: \(error.localizedDescription).")
         }
+
+        // Set the opponent's items.
+        if let opponentPlayerName = opponent?.player.displayName {
+            if let items = gameData.items[opponentPlayerName] {
+                opponent?.items = items
+            }
+        }
+//        do {
+//            if let gameData = try? PropertyListDecoder().decode(GameData.self, from: matchData) {
+//                // Set the match count.
+//                self.count = gameData.count
+//
+//                // Set the local player's items.
+//                if let localParticipant = self.localParticipant {
+//                    if let items = gameData.items[localParticipant.player.displayName] {
+//                        self.localParticipant?.items = items
+//                    }
+//                }
+//
+//                // Set the opponent's items.
+//                if let opponent = self.opponent {
+//                    if let items = gameData.items[opponent.player.displayName] {
+//                        self.opponent?.items = items
+//                    }
+//                }
+//            }
+//        }
     }
 }
