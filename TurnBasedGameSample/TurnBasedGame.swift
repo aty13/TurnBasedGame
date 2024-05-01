@@ -88,7 +88,9 @@ class TurnBasedGame: NSObject, GKMatchDelegate, GKLocalPlayerListener, Observabl
     /// - Tag:authenticatePlayer
     func authenticatePlayer() {
         // Set the authentication handler that GameKit invokes.
-        GKLocalPlayer.local.authenticateHandler = { viewController, error in
+        GKLocalPlayer.local.authenticateHandler = {
+            viewController,
+            error in
             if let viewController = viewController {
                 // If the view controller is non-nil, present it to the player so they can
                 // perform some necessary action to complete authentication.
@@ -105,11 +107,15 @@ class TurnBasedGame: NSObject, GKMatchDelegate, GKLocalPlayerListener, Observabl
             // local player properties.
             
             // Load the local player's avatar.
-            GKLocalPlayer.local.loadPhoto(for: GKPlayer.PhotoSize.small) { image, error in
+            GKLocalPlayer.local.loadPhoto(for: GKPlayer.PhotoSize.small) {
+                image,
+                error in
                 if let image {
                     // Create a Participant object to store the local player data.
-                    self.localParticipant = Participant(player: GKLocalPlayer.local,
-                                                   avatar: Image(uiImage: image))
+                    self.localParticipant = Participant(
+                        player: GKLocalPlayer.local,
+                        avatar: Image(uiImage: image)
+                    )
                 }
                 if let error {
                     // Handle an error if it occurs.
